@@ -96,6 +96,11 @@ def main():
     # Initialize servos and camera
     yaw_pwm, pitch_pwm, roll_pwm = initialize_servos()
     cap = cv2.VideoCapture(0)  # Adjust if your camera index is different
+    
+    # Set a lower resolution to reduce memory usage
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    
     time.sleep(2)  # Allow camera sensor to warm up
 
     # Gain factors for each control axis (tune these experimentally)
@@ -135,7 +140,7 @@ def main():
                 print(f"Pitch Err: {pitch_error:.2f}, Yaw Err: {yaw_error:.2f}, Roll Err: {roll_error:.2f}")
                 print(f"Servo Angles -> Pitch: {new_pitch:.2f}, Yaw: {new_yaw:.2f}, Roll: {new_roll:.2f}")
 
-                # Update current servo positions (you might smooth these values in a full implementation)
+                # Update current servo positions (consider smoothing these values in a full implementation)
                 current_pitch = new_pitch
                 current_yaw = new_yaw
                 current_roll = new_roll
@@ -148,6 +153,10 @@ def main():
     finally:
         cap.release()
         cv2.destroyAllWindows()
+        # Explicitly stop PWM signals before cleaning up GPIO
+        yaw_pwm.stop()
+        pitch_pwm.stop()
+        roll_pwm.stop()
         GPIO.cleanup()
 
 if __name__ == '__main__':
