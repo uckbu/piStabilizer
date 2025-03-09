@@ -93,19 +93,21 @@ def process_frame(frame):
 # --- Main Loop: Capture, Process, and Control ---
 
 def main():
-    # Initialize servos and camera
+    # Initialize servos
     yaw_pwm, pitch_pwm, roll_pwm = initialize_servos()
-    
-    # Use the V4L2 backend explicitly and lower resolution
-    cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
-    
+
+    # Use a GStreamer pipeline with libcamerasrc (for libcamera support)
+    pipeline = (
+        "libcamerasrc ! video/x-raw, width=320, height=240, framerate=30/1 ! "
+        "videoconvert ! appsink"
+    )
+    cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+
     # Check if camera opened successfully
     if not cap.isOpened():
-        print("Error: Could not open video device. Make sure the Pi camera is enabled and working.")
+        print("Error: Could not open video device. Ensure libcamera is installed and enabled.")
         return
-    
+
     time.sleep(2)  # Allow camera sensor to warm up
 
     # Gain factors for each control axis (tune these experimentally)
@@ -145,12 +147,10 @@ def main():
                 print(f"Pitch Err: {pitch_error:.2f}, Yaw Err: {yaw_error:.2f}, Roll Err: {roll_error:.2f}")
                 print(f"Servo Angles -> Pitch: {new_pitch:.2f}, Yaw: {new_yaw:.2f}, Roll: {new_roll:.2f}")
 
-                # Update current servo positions (you might smooth these values in a full implementation)
                 current_pitch = new_pitch
                 current_yaw = new_yaw
                 current_roll = new_roll
-            
-            # Display the frame with overlays
+
             cv2.imshow("Pencil Orientation", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
@@ -163,7 +163,6 @@ def main():
         pitch_pwm.stop()
         roll_pwm.stop()
         GPIO.cleanup()
-        # Delete PWM objects to minimize destructor warnings
         del yaw_pwm, pitch_pwm, roll_pwm
 
 if __name__ == '__main__':
