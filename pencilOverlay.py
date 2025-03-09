@@ -93,10 +93,10 @@ def process_frame(frame):
 # --- Main Loop: Capture, Process, and Control ---
 
 def main():
-    # Initialize servos
+    # Initialize servos (even if not connected, these calls will run)
     yaw_pwm, pitch_pwm, roll_pwm = initialize_servos()
 
-    # Use a GStreamer pipeline with libcamerasrc (for libcamera support)
+    # Use a GStreamer pipeline with libcamerasrc for libcamera support
     pipeline = (
         "libcamerasrc ! video/x-raw, width=320, height=240, framerate=30/1 ! "
         "videoconvert ! appsink"
@@ -110,12 +110,15 @@ def main():
 
     time.sleep(2)  # Allow camera sensor to warm up
 
-    # Gain factors for each control axis (tune these experimentally)
-    pitch_gain = 0.05  # Conversion factor: degrees per pixel error
-    yaw_gain = 0.05
-    roll_gain = 0.1   # Roll error is already in degrees
+    # Debug message to show the system is running
+    print("Camera stream opened successfully.")
 
-    # Start with neutral positions (90°)
+    # Gain factors for control (used here for testing overlay only)
+    pitch_gain = 0.05
+    yaw_gain = 0.05
+    roll_gain = 0.1
+
+    # Neutral positions (even though no servos are physically connected)
     current_pitch = 90
     current_yaw = 90
     current_roll = 90
@@ -127,30 +130,26 @@ def main():
                 print("Failed to capture frame.")
                 break
 
+            # Debug: Print the frame shape to ensure frames are coming through
+            print(f"Captured frame with shape: {frame.shape}")
+
             pitch_error, yaw_error, roll_error = process_frame(frame)
             if pitch_error is not None:
-                # Calculate new servo angles based on errors and gain factors
+                # Here we simply update our virtual servo angles for debug output
                 new_pitch = current_pitch + pitch_gain * pitch_error
                 new_yaw = current_yaw + yaw_gain * yaw_error
                 new_roll = current_roll + roll_gain * roll_error
 
-                # Constrain the angles to the valid range (0-180°)
                 new_pitch = max(0, min(180, new_pitch))
                 new_yaw = max(0, min(180, new_yaw))
                 new_roll = max(0, min(180, new_roll))
 
-                # Update each servo's position
-                set_servo_angle(pitch_pwm, new_pitch)
-                set_servo_angle(yaw_pwm, new_yaw)
-                set_servo_angle(roll_pwm, new_roll)
-
                 print(f"Pitch Err: {pitch_error:.2f}, Yaw Err: {yaw_error:.2f}, Roll Err: {roll_error:.2f}")
-                print(f"Servo Angles -> Pitch: {new_pitch:.2f}, Yaw: {new_yaw:.2f}, Roll: {new_roll:.2f}")
+                print(f"Virtual Servo Angles -> Pitch: {new_pitch:.2f}, Yaw: {new_yaw:.2f}, Roll: {new_roll:.2f}")
 
-                current_pitch = new_pitch
-                current_yaw = new_yaw
-                current_roll = new_roll
+                current_pitch, current_yaw, current_roll = new_pitch, new_yaw, new_roll
 
+            # Display the frame with overlays if a display is available
             cv2.imshow("Pencil Orientation", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
@@ -158,7 +157,6 @@ def main():
     finally:
         cap.release()
         cv2.destroyAllWindows()
-        # Explicitly stop PWM signals
         yaw_pwm.stop()
         pitch_pwm.stop()
         roll_pwm.stop()
