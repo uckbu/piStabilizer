@@ -93,32 +93,29 @@ def process_frame(frame):
 # --- Main Loop: Capture, Process, and Control ---
 
 def main():
-    # Initialize servos (even if not connected, these calls will run)
+    # Initialize servos (even if not physically connected)
     yaw_pwm, pitch_pwm, roll_pwm = initialize_servos()
 
-    # Use a GStreamer pipeline with libcamerasrc for libcamera support
+    # Use a GStreamer pipeline with libcamerasrc and sync=false
     pipeline = (
-        "libcamerasrc ! video/x-raw, width=320, height=240, framerate=30/1 ! "
-        "videoconvert ! appsink"
+        "libcamerasrc ! video/x-raw,width=320,height=240,framerate=30/1 ! "
+        "videoconvert ! appsink sync=false"
     )
     cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
 
-    # Check if camera opened successfully
+    # Check if the camera opened successfully
     if not cap.isOpened():
         print("Error: Could not open video device. Ensure libcamera is installed and enabled.")
         return
 
     time.sleep(2)  # Allow camera sensor to warm up
-
-    # Debug message to show the system is running
     print("Camera stream opened successfully.")
 
-    # Gain factors for control (used here for testing overlay only)
+    # Gain factors for testing overlay (even if servos aren't connected)
     pitch_gain = 0.05
     yaw_gain = 0.05
     roll_gain = 0.1
 
-    # Neutral positions (even though no servos are physically connected)
     current_pitch = 90
     current_yaw = 90
     current_roll = 90
@@ -130,12 +127,11 @@ def main():
                 print("Failed to capture frame.")
                 break
 
-            # Debug: Print the frame shape to ensure frames are coming through
+            # Debug: Print frame dimensions
             print(f"Captured frame with shape: {frame.shape}")
 
             pitch_error, yaw_error, roll_error = process_frame(frame)
             if pitch_error is not None:
-                # Here we simply update our virtual servo angles for debug output
                 new_pitch = current_pitch + pitch_gain * pitch_error
                 new_yaw = current_yaw + yaw_gain * yaw_error
                 new_roll = current_roll + roll_gain * roll_error
@@ -149,7 +145,6 @@ def main():
 
                 current_pitch, current_yaw, current_roll = new_pitch, new_yaw, new_roll
 
-            # Display the frame with overlays if a display is available
             cv2.imshow("Pencil Orientation", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
