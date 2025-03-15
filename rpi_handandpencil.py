@@ -131,6 +131,10 @@ def main():
         print("Error: Could not open camera.")
         return
     
+    # Set the resolution to 640x480
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    
     time.sleep(2)
     print("Camera initialized successfully.")
     
