@@ -3,8 +3,6 @@ import mediapipe as mp
 import numpy as np
 import time
 import RPi.GPIO as GPIO
-from picamera import PiCamera
-from picamera.array import PiRGBArray
 
 # ---------- Servo Setup ----------
 GPIO.setmode(GPIO.BCM)
@@ -127,14 +125,23 @@ def main():
         min_tracking_confidence=0.6
     )
     
-    camera = PiCamera()
-    camera.resolution = (640, 480)
-    camera.framerate = 30
-    raw_capture = PiRGBArray(camera, size=camera.resolution)
-    time.sleep(2)
-    print("Pi Camera initialized successfully.")
+    # Use OpenCV's VideoCapture to access the camera at port 0
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Error: Could not open camera.")
+        return
     
-    h, w = 480, 640
+    time.sleep(2)
+    print("Camera initialized successfully.")
+    
+    # Obtain frame dimensions from the camera
+    ret, frame = cap.read()
+    if not ret:
+        print("Error: Could not read frame from camera.")
+        cap.release()
+        return
+    h, w = frame.shape[:2]
+    
     smoothed = {"pitch": 0.0, "yaw": 0.0, "roll": 0.0}
     alpha = 0.3
 
@@ -150,8 +157,12 @@ def main():
     print("Press 'c' to calibrate (set current orientation as neutral). Press 'q' to quit.")
     
     try:
-        for frame_obj in camera.capture_continuous(raw_capture, format="bgr", use_video_port=True):
-            frame = frame_obj.array
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("Failed to capture frame.")
+                break
+            
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = hands.process(frame_rgb)
             
@@ -210,7 +221,6 @@ def main():
             
             cv2.imshow("Hand & Lavender Pen Tracking", frame)
             key = cv2.waitKey(1) & 0xFF
-            raw_capture.truncate(0)
             if key == ord('q'):
                 break
             elif key == ord('c'):
@@ -221,8 +231,8 @@ def main():
         yaw_servo.stop()
         roll_servo.stop()
         GPIO.cleanup()
+        cap.release()
         cv2.destroyAllWindows()
-        camera.close()
 
 if __name__ == "__main__":
     main()
