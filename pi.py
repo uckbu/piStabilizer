@@ -23,8 +23,8 @@ def process_frame(frame):
     
     # Define HSV range for a typical bright #2 pencil yellow.
     # Adjust these if you're still seeing incorrect detection.
-    lower_bound = np.array([22, 150, 120])   # ~ Hue: 22°, Saturation: 150, Value: 120
-    upper_bound = np.array([35, 255, 255])   # ~ Hue: 35°, Saturation: 255, Value: 255
+    lower_bound = np.array([5, 108, 96])   # ~ Hue, Saturation, Value
+    upper_bound = np.array([40, 255, 240])  
     
     # Create mask to extract yellow regions
     mask = cv2.inRange(hsv, lower_bound, upper_bound)
