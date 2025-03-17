@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import time
-from picamera2 import Picamera2  # Use Picamera2 for the Pi Camera Module 3
+from picamera2 import Picamera2
 
 # --- Virtual Servo Control Simulation ---
 def set_virtual_servo_angle(current_angle, error, gain):
@@ -11,19 +11,20 @@ def set_virtual_servo_angle(current_angle, error, gain):
 # --- Computer Vision: Yellow Pencil Tracking & Overlay ---
 def process_frame(frame):
     """
-    Detects the largest object in the yellow range (assumed to be a #2 Ticonderoga pencil)
+    Detects the largest object in the yellow range (assumed to be a #2 Dixon Ticonderoga pencil)
     and computes errors:
       - pitch_error: vertical offset from the image center.
       - yaw_error: horizontal offset from the image center.
       - roll_error: deviation of the pencil's orientation from vertical.
     Overlays detection info on the frame.
     """
-    # Convert frame (in RGB) to HSV.
+    # Convert from RGB (Picamera2 default) to HSV
     hsv = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
     
-    # Define HSV range for yellow (adjusted for a typical #2 Ticonderoga pencil)
-    lower_bound = np.array([20, 100, 100])
-    upper_bound = np.array([40, 255, 255])
+    # Define HSV range for a typical bright #2 pencil yellow.
+    # Adjust these if you're still seeing incorrect detection.
+    lower_bound = np.array([22, 150, 120])   # ~ Hue: 22°, Saturation: 150, Value: 120
+    upper_bound = np.array([35, 255, 255])   # ~ Hue: 35°, Saturation: 255, Value: 255
     
     # Create mask to extract yellow regions
     mask = cv2.inRange(hsv, lower_bound, upper_bound)
@@ -32,6 +33,9 @@ def process_frame(frame):
     kernel = np.ones((5, 5), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    
+    # (Optional) For debugging, show the mask in a separate window:
+    # cv2.imshow("Mask", mask)
     
     # Find contours in the mask
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -90,15 +94,15 @@ def process_frame(frame):
     yaw_error = frame_center_x - cX
     pitch_error = frame_center_y - cY
 
-    overlay_text = (f"Angle: {angle:.2f} deg, Roll Err: {roll_error:.2f}, "
+    overlay_text = (f"Angle: {angle:.2f}°, Roll Err: {roll_error:.2f}, "
                     f"Yaw Err: {yaw_error:.2f}, Pitch Err: {pitch_error:.2f}")
-    cv2.putText(frame, overlay_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+    cv2.putText(frame, overlay_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                0.6, (0, 255, 255), 2)
 
     return pitch_error, yaw_error, roll_error
 
 # --- Main Loop: Capture, Process, and Simulate Control ---
 def main():
-    # Initialize Picamera2 to capture frames in RGB format at 640x480.
     picam2 = Picamera2()
     video_config = picam2.create_preview_configuration(
         main={"format": "RGB888", "size": (640, 480)}
@@ -117,8 +121,8 @@ def main():
 
     # Starting angles for virtual servos
     current_pitch = 90
-    current_yaw = 90
-    current_roll = 90
+    current_yaw   = 90
+    current_roll  = 90
 
     try:
         while True:
@@ -128,15 +132,15 @@ def main():
                 print("Failed to capture frame.")
                 break
 
-            print(f"Captured frame with shape: {frame.shape}")
             pitch_error, yaw_error, roll_error = process_frame(frame)
             if pitch_error is not None:
                 current_pitch = set_virtual_servo_angle(current_pitch, pitch_error, pitch_gain)
-                current_yaw = set_virtual_servo_angle(current_yaw, yaw_error, yaw_gain)
-                current_roll = set_virtual_servo_angle(current_roll, roll_error, roll_gain)
+                current_yaw   = set_virtual_servo_angle(current_yaw, yaw_error, yaw_gain)
+                current_roll  = set_virtual_servo_angle(current_roll, roll_error, roll_gain)
 
                 print(f"Pitch Err: {pitch_error:.2f}, Yaw Err: {yaw_error:.2f}, Roll Err: {roll_error:.2f}")
-                print(f"Virtual Servo Angles -> Pitch: {current_pitch:.2f}, Yaw: {current_yaw:.2f}, Roll: {current_roll:.2f}")
+                print(f"Virtual Servo Angles -> Pitch: {current_pitch:.2f}, "
+                      f"Yaw: {current_yaw:.2f}, Roll: {current_roll:.2f}")
 
             cv2.imshow("Yellow Pencil Tracking", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
