@@ -3,6 +3,7 @@ import mediapipe as mp
 import numpy as np
 import time
 import RPi.GPIO as GPIO
+from picamera2 import Picamera2  # Import the Picamera2 library
 
 # ---------- Servo Setup ----------
 GPIO.setmode(GPIO.BCM)
@@ -125,24 +126,23 @@ def main():
         min_tracking_confidence=0.6
     )
     
-    # Use OpenCV's VideoCapture to access the camera at port 0
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("Error: Could not open camera.")
-        return
+    # Initialize Picamera2 and configure the camera for BGR output at 640x480
+    picam2 = Picamera2()
+    video_config = picam2.create_preview_configuration(
+        main={"format": "BGR888", "size": (640, 480)}
+    )
+    picam2.configure(video_config)
+    picam2.start()
     
-    # Set the resolution to 640x480
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    
+    # Give the camera time to warm up
     time.sleep(2)
-    print("Camera initialized successfully.")
+    print("Camera initialized successfully via Picamera2.")
     
-    # Obtain frame dimensions from the camera
-    ret, frame = cap.read()
-    if not ret:
+    # Obtain frame dimensions from a captured frame
+    frame = picam2.capture_array()
+    if frame is None:
         print("Error: Could not read frame from camera.")
-        cap.release()
+        picam2.stop()
         return
     h, w = frame.shape[:2]
     
@@ -162,11 +162,13 @@ def main():
     
     try:
         while True:
-            ret, frame = cap.read()
-            if not ret:
+            # Capture frame from Picamera2
+            frame = picam2.capture_array()
+            if frame is None:
                 print("Failed to capture frame.")
                 break
             
+            # Process the image for hand landmarks using MediaPipe
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = hands.process(frame_rgb)
             
@@ -235,7 +237,7 @@ def main():
         yaw_servo.stop()
         roll_servo.stop()
         GPIO.cleanup()
-        cap.release()
+        picam2.stop()  # Stop Picamera2
         cv2.destroyAllWindows()
 
 if __name__ == "__main__":
