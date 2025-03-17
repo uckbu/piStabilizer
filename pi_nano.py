@@ -5,11 +5,18 @@ from picamera2 import Picamera2
 import paho.mqtt.client as mqtt
 
 # --- MQTT Setup ---
-broker_address = "localhost"  # If Mosquitto is on the same Pi, use localhost.
+broker_address = "localhost"  # Adjust if your broker is running on a different machine.
 mqtt_topic = "sensors/orientation"
-mqtt_client = mqtt.Client("RaspberryPiPublisher")
+
+# Instantiate the MQTT client with explicit keyword arguments.
+# - client_id: a unique identifier for this client.
+# - protocol: using MQTT v3.1.1
+# - callback_api_version: set to 2 to use the new callback API.
+mqtt_client = mqtt.Client(client_id="RaspberryPiPublisher",
+                          protocol=mqtt.MQTTv311,
+                          callback_api_version=2)
 mqtt_client.connect(broker_address)
-mqtt_client.loop_start()  # Start a background thread for MQTT networking
+mqtt_client.loop_start()  # Start network loop in a background thread
 
 # --- Virtual Servo Control Simulation ---
 def set_virtual_servo_angle(current_angle, error, gain):
@@ -18,13 +25,6 @@ def set_virtual_servo_angle(current_angle, error, gain):
 
 # --- Computer Vision: Yellow Pencil Tracking & Overlay ---
 def process_frame(frame):
-    """
-    Detects the largest yellow object (assumed to be a #2 pencil) and computes:
-      - pitch_error: vertical offset from frame center.
-      - yaw_error: horizontal offset from frame center.
-      - roll_error: difference from vertical orientation.
-    Overlays detection info on the frame.
-    """
     hsv = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
     lower_bound = np.array([5, 108, 96])
     upper_bound = np.array([40, 255, 240])
@@ -82,7 +82,7 @@ def process_frame(frame):
                 0.6, (0, 255, 255), 2)
     return pitch_error, yaw_error, roll_error
 
-# --- Main Loop: Capture, Process, and Publish ---
+# --- Main Loop ---
 def main():
     picam2 = Picamera2()
     video_config = picam2.create_preview_configuration(
@@ -91,9 +91,9 @@ def main():
     picam2.configure(video_config)
     picam2.start()
     time.sleep(2)
-    print("Camera stream initialized successfully via Picamera2.")
+    print("Camera stream initialized via Picamera2.")
 
-    # Gains for control simulation
+    # Gain factors for simulation
     pitch_gain = 0.05
     yaw_gain = 0.05
     roll_gain = 0.1
@@ -119,7 +119,7 @@ def main():
                 print(f"Pitch Err: {pitch_error:.2f}, Yaw Err: {yaw_error:.2f}, Roll Err: {roll_error:.2f}")
                 print(f"Virtual Servo Angles -> Pitch: {current_pitch:.2f}, Yaw: {current_yaw:.2f}, Roll: {current_roll:.2f}")
 
-                # Publish the current servo angles via MQTT in CSV format: "pitch,yaw,roll"
+                # Publish the servo angles as a CSV string: "pitch,yaw,roll"
                 payload = f"{current_pitch:.2f},{current_yaw:.2f},{current_roll:.2f}"
                 mqtt_client.publish(mqtt_topic, payload)
 
@@ -130,7 +130,7 @@ def main():
     finally:
         picam2.stop()
         cv2.destroyAllWindows()
-        mqtt_client.loop_stop()  # Stop the MQTT background thread
+        mqtt_client.loop_stop()
 
 if __name__ == '__main__':
     main()
