@@ -1,29 +1,30 @@
 import cv2
 import numpy as np
 import time
-import pigpio  # Library for stable servo control via hardware PWM
+import RPi.GPIO as GPIO
 
 # --- Configuration ---
-# GPIO pins for each servo (BCM numbering)
+# GPIO pins for each servo (using BCM numbering)
 SERVO_PITCH_PIN = 17
 SERVO_YAW_PIN   = 27
 SERVO_ROLL_PIN  = 22
 
-# --- Helper Functions ---
-def angle_to_pulse(angle):
-    """
-    Convert an angle in degrees (0-180) to a pulse width in microseconds.
-    For the SG90, 0° typically corresponds to ~500µs and 180° to ~2500µs.
-    """
-    pulse = 500 + (angle / 180.0) * 2000
-    return int(pulse)
+PWM_FREQUENCY = 50  # 50 Hz for SG90 servos
 
-def set_servo_angle(pi, gpio_pin, angle):
+# --- Helper Functions ---
+def angle_to_duty(angle):
     """
-    Set the servo at gpio_pin to the specified angle.
+    Convert an angle in degrees (0-180) to a duty cycle percentage.
+    For SG90, 0° typically corresponds to ~2.5% duty cycle and 180° to ~12.5%.
     """
-    pulse_width = angle_to_pulse(angle)
-    pi.set_servo_pulsewidth(gpio_pin, pulse_width)
+    return 2.5 + (angle / 180.0) * 10.0
+
+def set_servo_angle(servo_pwm, angle):
+    """
+    Update servo position by changing the PWM duty cycle.
+    """
+    duty = angle_to_duty(angle)
+    servo_pwm.ChangeDutyCycle(duty)
 
 # --- Computer Vision: Pencil Tracking ---
 def process_frame(frame):
@@ -33,14 +34,14 @@ def process_frame(frame):
       - pitch_error: vertical offset.
       - yaw_error: horizontal offset.
       - roll_error: difference between the pencil’s angle and vertical.
-    Overlays the detection info on the frame.
+    Overlays detection information on the frame.
     """
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     lower_bound = np.array([10, 100, 100])
     upper_bound = np.array([30, 255, 255])
     mask = cv2.inRange(hsv, lower_bound, upper_bound)
     
-    # Morphological operations to reduce noise
+    # Reduce noise with morphological operations
     kernel = np.ones((5, 5), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
@@ -79,7 +80,7 @@ def process_frame(frame):
         cX, cY = frame.shape[1] // 2, frame.shape[0] // 2
     cv2.circle(frame, (cX, cY), 5, (0, 0, 255), -1)
     
-    # Fit a line to estimate orientation
+    # Fit a line to estimate the pencil's orientation
     line = cv2.fitLine(pencil_contour, cv2.DIST_L2, 0, 0.01, 0.01)
     vx, vy, x, y = map(float, line.squeeze())
     rows, cols = frame.shape[:2]
@@ -103,35 +104,40 @@ def process_frame(frame):
 
 # --- Main Loop ---
 def main():
-    # Initialize pigpio for stable PWM output
-    pi = pigpio.pi()
-    if not pi.connected:
-        print("Error: Could not connect to pigpio daemon.")
-        return
-
-    # Initialize servo positions to 90° (neutral position)
+    # --- GPIO Setup ---
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(SERVO_PITCH_PIN, GPIO.OUT)
+    GPIO.setup(SERVO_YAW_PIN, GPIO.OUT)
+    GPIO.setup(SERVO_ROLL_PIN, GPIO.OUT)
+    
+    servo_pitch = GPIO.PWM(SERVO_PITCH_PIN, PWM_FREQUENCY)
+    servo_yaw   = GPIO.PWM(SERVO_YAW_PIN, PWM_FREQUENCY)
+    servo_roll  = GPIO.PWM(SERVO_ROLL_PIN, PWM_FREQUENCY)
+    
+    # Start PWM with initial duty cycle corresponding to 90° (neutral)
     initial_angle = 90
-    set_servo_angle(pi, SERVO_PITCH_PIN, initial_angle)
-    set_servo_angle(pi, SERVO_YAW_PIN, initial_angle)
-    set_servo_angle(pi, SERVO_ROLL_PIN, initial_angle)
-
-    # Setup camera capture (for Pi Camera Module 3, ensure libcamera is enabled)
+    servo_pitch.start(angle_to_duty(initial_angle))
+    servo_yaw.start(angle_to_duty(initial_angle))
+    servo_roll.start(angle_to_duty(initial_angle))
+    
+    # Setup camera capture (for Pi Camera Module 3, ensure libcamera is enabled if needed)
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("Error: Could not open camera.")
+        GPIO.cleanup()
         return
 
     time.sleep(2)
     print("Camera stream opened successfully.")
 
-    # Gain factors for servo adjustment based on error values
+    # Gain factors for servo adjustments based on computed error values
     pitch_gain = 0.05
     yaw_gain = 0.05
     roll_gain = 0.1
 
     current_pitch = initial_angle
-    current_yaw = initial_angle
-    current_roll = initial_angle
+    current_yaw   = initial_angle
+    current_roll  = initial_angle
 
     try:
         while True:
@@ -150,10 +156,10 @@ def main():
                 print(f"Pitch Err: {pitch_error:.2f}, Yaw Err: {yaw_error:.2f}, Roll Err: {roll_error:.2f}")
                 print(f"Servo Angles -> Pitch: {current_pitch:.2f}, Yaw: {current_yaw:.2f}, Roll: {current_roll:.2f}")
 
-                # Move the servos to the new angles
-                set_servo_angle(pi, SERVO_PITCH_PIN, current_pitch)
-                set_servo_angle(pi, SERVO_YAW_PIN, current_yaw)
-                set_servo_angle(pi, SERVO_ROLL_PIN, current_roll)
+                # Move the servos to the new angles by updating PWM duty cycles
+                set_servo_angle(servo_pitch, current_pitch)
+                set_servo_angle(servo_yaw, current_yaw)
+                set_servo_angle(servo_roll, current_roll)
 
             cv2.imshow("Yellow-Orange Pencil Tracking", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -162,11 +168,10 @@ def main():
     finally:
         cap.release()
         cv2.destroyAllWindows()
-        # Stop servo pulses and clean up pigpio
-        pi.set_servo_pulsewidth(SERVO_PITCH_PIN, 0)
-        pi.set_servo_pulsewidth(SERVO_YAW_PIN, 0)
-        pi.set_servo_pulsewidth(SERVO_ROLL_PIN, 0)
-        pi.stop()
+        servo_pitch.stop()
+        servo_yaw.stop()
+        servo_roll.stop()
+        GPIO.cleanup()
 
 if __name__ == '__main__':
     main()
