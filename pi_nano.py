@@ -5,16 +5,15 @@ from picamera2 import Picamera2
 import paho.mqtt.client as mqtt
 
 # --- MQTT Setup ---
-broker_address = "localhost"  # Adjust if your broker is running on a different machine.
+broker_address = "localhost"  # Adjust if your broker is on another machine.
 mqtt_topic = "sensors/orientation"
 
-# Instantiate the MQTT client with explicit keyword arguments.
-# - client_id: a unique identifier for this client.
-# - protocol: using MQTT v3.1.1
-# - callback_api_version: set to 2 to use the new callback API.
-mqtt_client = mqtt.Client(client_id="RaspberryPiPublisher",
-                          protocol=mqtt.MQTTv311,
-                          callback_api_version=2)
+# Instantiate the MQTT client using the new callback API enum.
+mqtt_client = mqtt.Client(
+    client_id="RaspberryPiPublisher",
+    protocol=mqtt.MQTTv311,
+    callback_api_version=mqtt.CallbackAPIVersion.V2
+)
 mqtt_client.connect(broker_address)
 mqtt_client.loop_start()  # Start network loop in a background thread
 
