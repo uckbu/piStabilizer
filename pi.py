@@ -1,31 +1,31 @@
 import cv2
 import numpy as np
 import time
-from picamera2 import Picamera2  # Import Picamera2
+from picamera2 import Picamera2  # Use Picamera2 for the Pi Camera Module 3
 
 # --- Virtual Servo Control Simulation ---
 def set_virtual_servo_angle(current_angle, error, gain):
     new_angle = current_angle + gain * error
     return max(0, min(180, new_angle))
 
-# --- Computer Vision: Yellow-Orange Pencil Tracking & Overlay ---
+# --- Computer Vision: Yellow Pencil Tracking & Overlay ---
 def process_frame(frame):
     """
-    Detects the largest object in the yellow-orange range (assumed to be your #2 pencil)
+    Detects the largest object in the yellow range (assumed to be a #2 Ticonderoga pencil)
     and computes errors:
       - pitch_error: vertical offset from the image center.
       - yaw_error: horizontal offset from the image center.
       - roll_error: deviation of the pencil's orientation from vertical.
     Overlays detection info on the frame.
     """
-    # Since the incoming frame is in RGB, convert from RGB to HSV.
+    # Convert frame (in RGB) to HSV.
     hsv = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
     
-    # Define HSV range covering both yellow and orange hues.
-    lower_bound = np.array([10, 100, 100])
-    upper_bound = np.array([30, 255, 255])
+    # Define HSV range for yellow (adjusted for a typical #2 Ticonderoga pencil)
+    lower_bound = np.array([20, 100, 100])
+    upper_bound = np.array([40, 255, 255])
     
-    # Create mask to extract yellow-orange regions
+    # Create mask to extract yellow regions
     mask = cv2.inRange(hsv, lower_bound, upper_bound)
     
     # Apply morphological operations to reduce noise
@@ -110,13 +110,6 @@ def main():
     time.sleep(2)
     print("Camera stream initialized successfully via Picamera2.")
 
-    # Obtain a frame to determine dimensions
-    frame = picam2.capture_array()
-    if frame is None:
-        print("Error: Could not read frame from camera.")
-        picam2.stop()
-        return
-
     # Gain factors for virtual servo simulation
     pitch_gain = 0.05
     yaw_gain = 0.05
@@ -129,7 +122,7 @@ def main():
 
     try:
         while True:
-            # Capture frame from Picamera2 (already in RGB)
+            # Capture frame from Picamera2 (in RGB)
             frame = picam2.capture_array()
             if frame is None:
                 print("Failed to capture frame.")
@@ -145,7 +138,7 @@ def main():
                 print(f"Pitch Err: {pitch_error:.2f}, Yaw Err: {yaw_error:.2f}, Roll Err: {roll_error:.2f}")
                 print(f"Virtual Servo Angles -> Pitch: {current_pitch:.2f}, Yaw: {current_yaw:.2f}, Roll: {current_roll:.2f}")
 
-            cv2.imshow("Yellow-Orange Pencil Tracking", frame)
+            cv2.imshow("Yellow Pencil Tracking", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
