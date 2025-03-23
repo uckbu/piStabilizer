@@ -77,13 +77,10 @@ def process_frame(frame):
 
     return pitch_error, yaw_error, roll_error
 
-# --- Main Loop: Capture, Process, Transmit Servo Data via WiFi ---
 def main():
-    # WiFi connection details: update with the ESP32's IP address and chosen port.
-    server_ip = "10.0.0.77"  # Replace with your ESP32's IP
+    server_ip = "192.168.1.212"
     server_port = 5000
 
-    # Create a TCP socket and connect to the ESP32 server.
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((server_ip, server_port))
     print("Connected to ESP32 server at {}:{}".format(server_ip, server_port))
